@@ -13,18 +13,42 @@ function inject(serv,player)
     player.entity.player=player;
     player.entity.health = 20;
     player.entity.food = 20;
+    player.playerViewDistance = 150;
     player.view=8;
     player.world=serv.overworld;
     player.username=player._client.username;
     serv.players.push(player);
     serv.uuidToPlayer[player._client.uuid] = player;
     player.loadedChunks={};
+    player.nearbyPlayers=[];
   }
 
-  function toFixedPosition(p)
+  function updateAndSpawnNearbyPlayers()
   {
-    return p.scaled(32).floored();
+    player.lastPositionPlayersUpdated=player.entity.position;
+    var updatedPlayers=player.getNearby();
+    var playersToAdd=updatedPlayers.filter(p => player.nearbyPlayers.indexOf(p)==-1);
+    var playersToRemove=player.nearbyPlayers.filter(p => updatedPlayers.indexOf(p)==-1);
+    player.despawnPlayers(playersToRemove);
+    playersToAdd.forEach(player.spawnAPlayer);
+
+    playersToRemove.forEach(p => p.despawnPlayers([player]));
+    playersToRemove.forEach(p => p.nearbyPlayers=p.getNearby());
+    playersToAdd.forEach(p => p.spawnAPlayer(player));
+    playersToAdd.forEach(p => p.nearbyPlayers=p.getNearby());
+
+    player.nearbyPlayers=updatedPlayers;
+
   }
+
+  function sendPlayersWhenMove()
+  {
+    player.on("positionChanged",function(){
+      if(player.entity.position.distanceTo(player.lastPositionPlayersUpdated)>2*32)
+        player.updateAndSpawnNearbyPlayers();
+    });
+  }
+
   function sendLogin()
   {
     // send init data so client will start rendering world
@@ -37,44 +61,14 @@ function inject(serv,player)
       reducedDebugInfo: false,
       maxPlayers: serv._server.maxPlayers
     });
-    player.entity.position=toFixedPosition(player.spawnPoint);
+    player.entity.position=player.spawnPoint.toFixedPosition();
   }
 
-  function sendMap()
+  function sendChunkWhenMove()
   {
-    return player.sendNearbyChunks(3)
-      .catch((err) => setTimeout(function() { throw err; }), 0);
-  }
-
-  function sendRestMap()
-  {
-    player.sendingChunks=true;
-    player.sendNearbyChunks(player.view)
-      .then(() => player.sendingChunks=false)
-      .catch((err)=> setTimeout(function(){throw err;},0));
-
     player.on("positionChanged",function(){
       if(!player.sendingChunks && player.entity.position.distanceTo(player.lastPositionChunkUpdated)>16*32)
-      {
-        player.sendingChunks=true;
-        player.sendNearbyChunks(player.view)
-          .then(() => player.sendingChunks=false)
-          .catch((err)=> setTimeout(function(){throw err;},0));
-      }
-    });
-    player.on("teleport", function() {
-      player.sendingChunks=true;
-      player.sendNearbyChunks(player.view)
-        .then(() => player.sendingChunks=false)
-        .catch((err)=> setTimeout(function(){throw err;},0));
-    });
-  }
-
-  function sendSpawnPosition()
-  {
-    console.log("setting spawn at "+player.spawnPoint);
-    player._client.write('spawn_position',{
-      "location":player.spawnPoint
+        player.sendRestMap();
     });
   }
 
@@ -139,22 +133,25 @@ function inject(serv,player)
 
     addPlayer();
     sendLogin();
-    await sendMap();
-    sendSpawnPosition();
+    await player.sendMap();
+    player.sendSpawnPosition();
+    player.sendPosition();
     player.updateHealth(player.entity.health);
 
-    player.emit("spawned");
 
     updateTime();
     setGameMode(player.gameMode);
     fillTabList();
+    player.updateAndSpawnNearbyPlayers();
 
-    player.spawn();
     announceJoin();
+    player.emit("spawned");
+    sendPlayersWhenMove();
 
-    setTimeout(sendRestMap,100);
+    setTimeout(function(){player.sendRestMap();sendChunkWhenMove();},100);
   }
 
   player.setGameMode=setGameMode;
   player.login=login;
+  player.updateAndSpawnNearbyPlayers=updateAndSpawnNearbyPlayers;
 }

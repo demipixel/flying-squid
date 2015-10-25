@@ -4,37 +4,18 @@ var spiralloop = require('spiralloop');
 module.exports = inject;
 
 function inject(serv, player) {
-  function spawn() {
-    player.setPosition(player.spawnPoint, { yaw: 0, pitch: 0, exact: true });
-  }
 
-  function spawnForOthers() {
-    player._writeOthersNearby('named_entity_spawn',{
-      entityId: player.entity.id,
-      playerUUID: player._client.uuid,
-      x: player.entity.position.x,
-      y: player.entity.position.y,
-      z: player.entity.position.z,
-      yaw: player.entity.yaw,
-      pitch: player.entity.pitch,
+  function spawnAPlayer(spawnedPlayer) {
+    player._client.write('named_entity_spawn', {
+      entityId: spawnedPlayer.entity.id,
+      playerUUID: spawnedPlayer._client.uuid,
+      x: spawnedPlayer.entity.position.x,
+      y: spawnedPlayer.entity.position.y,
+      z: spawnedPlayer.entity.position.z,
+      yaw: spawnedPlayer.entity.yaw,
+      pitch: spawnedPlayer.entity.pitch,
       currentItem: 0,
-      metadata: player.entity.metadata
-    });
-  }
-
-  function sendNearbyPlayers() {
-    player.getNearby().forEach(function (otherPlayer) {
-      player._client.write('named_entity_spawn', {
-        entityId: otherPlayer.entity.id,
-        playerUUID: otherPlayer._client.uuid,
-        x: otherPlayer.entity.position.x,
-        y: otherPlayer.entity.position.y,
-        z: otherPlayer.entity.position.z,
-        yaw: otherPlayer.entity.yaw,
-        pitch: otherPlayer.entity.pitch,
-        currentItem: 0,
-        metadata: otherPlayer.entity.metadata
-      });
+      metadata: spawnedPlayer.entity.metadata
     });
   }
 
@@ -59,9 +40,8 @@ function inject(serv, player) {
     return t;
   }
 
-  function sendNearbyChunks(view, world)
+  function sendNearbyChunks(view)
   {
-    world = world || player.world;
     player.lastPositionChunkUpdated=player.entity.position;
     var playerChunkX=Math.floor(player.entity.position.x/16/32);
     var playerChunkZ=Math.floor(player.entity.position.z/16/32);
@@ -80,7 +60,7 @@ function inject(serv, player) {
       .reduce((acc,{chunkX,chunkZ})=>
          acc
           //.then(() => sleep(100))
-          .then(() => world.getColumn(chunkX,chunkZ))
+          .then(() => player.world.getColumn(chunkX,chunkZ))
           .then((column) => player.sendChunk(chunkX,chunkZ,column))
       ,Promise.resolve());
   }
@@ -89,7 +69,29 @@ function inject(serv, player) {
     return new Promise(r => setTimeout(r, ms));
   }
 
-  function changeWorld(world, opt) {
+  function sendMap()
+  {
+    return player.sendNearbyChunks(3)
+      .catch((err) => setTimeout(function() { throw err; }), 0);
+  }
+
+  function sendRestMap()
+  {
+    player.sendingChunks=true;
+    player.sendNearbyChunks(player.view)
+      .then(() => player.sendingChunks=false)
+      .catch((err)=> setTimeout(function(){throw err;},0));
+  }
+
+  function sendSpawnPosition()
+  {
+    console.log("setting spawn at "+player.spawnPoint);
+    player._client.write('spawn_position',{
+      "location":player.spawnPoint
+    });
+  }
+
+  async function changeWorld(world, opt) {
 
     opt = opt || {};
     player.world = world;
@@ -101,16 +103,24 @@ function inject(serv, player) {
       gamemode: opt.gamemode || player.gameMode,
       levelType:'default'
     });
-    player.setPosition(opt.position || player.spawnPoint, { yaw: opt.yaw || 0, pitch: opt.pitch || 0 }); // Automatically sends chunks around players
+    player.entity.position=player.spawnPoint.toFixedPosition();
+    player.sendSpawnPosition();
+    player.updateAndSpawnNearbyPlayers();
+
+    await player.sendMap();
+    setTimeout(player.sendRestMap,100);
+    player.sendPosition();
+
     player.emit('change_world');
   }
 
-  player.spawn = spawn;
-  player.spawnForOthers = spawnForOthers;
-  player.sendNearbyPlayers = sendNearbyPlayers;
   player.sendNearbyChunks = sendNearbyChunks;
   player.changeWorld = changeWorld;
   player.sendChunk = sendChunk;
+  player.sendMap = sendMap;
+  player.sendRestMap = sendRestMap;
+  player.sendSpawnPosition = sendSpawnPosition;
+  player.spawnAPlayer = spawnAPlayer;
 
   player.on('chat', function(message) {
     if (message == 'world') {

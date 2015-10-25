@@ -29,7 +29,6 @@
       - [serv.createLog()](#servcreatelog)
       - [serv.log(message)](#servlogmessage)
       - [serv.broadcast(message[,color])](#servbroadcastmessagecolor)
-      - [serv.setBlock(position,blockType)](#servsetblockpositionblocktype)
       - [serv.getPlayer(username)](#servgetplayerusername)
       - [serv.getNearby(loc)](#servgetnearbyloc)
       - [server.banUsername(username,reason,callback)](#serverbanusernameusernamereasoncallback)
@@ -49,6 +48,7 @@
       - [player.username](#playerusername)
       - [player.view](#playerview)
       - [player.world](#playerworld)
+      - [player.nearbyPlayers](#playernearbyplayers)
     - [Events](#events-1)
       - ["connected"](#connected)
       - ["spawned"](#spawned)
@@ -57,7 +57,6 @@
       - ["chat" (message)](#chat-message)
       - ["kicked" (kicker,reason)](#kicked-kickerreason)
       - ["positionChanged"](#positionchanged)
-      - ["teleport"](#teleport)
     - [Methods](#methods-1)
       - [player.login()](#playerlogin)
       - [player.ban(reason)](#playerbanreason)
@@ -67,12 +66,14 @@
       - [player.changeBlock(position,blockType)](#playerchangeblockpositionblocktype)
       - [player.sendBlock(position,blockType)](#playersendblockpositionblocktype)
       - [player.sendInitialPosition()](#playersendinitialposition)
-      - [player.spawn()](#playerspawn)
       - [player.setGameMode(gameMode)](#playersetgamemodegamemode)
       - [player.handleCommand(command)](#playerhandlecommandcommand)
+      - [player.setBlock(position,blockType)](#playersetblockpositionblocktype)
       - [player.updateHealth(health)](#playerupdatehealthhealth)
-      - [player.sendPosition(position, opt)](#playersendpositionposition-opt)
       - [player.changeWorld(world, opt)](#playerchangeworldworld-opt)
+      - [player.spawnAPlayer(spawnedPlayer)](#playerspawnaplayerspawnedplayer)
+      - [player.despawnPlayers(despawnedPlayers)](#playerdespawnplayersdespawnedplayers)
+      - [player.updateAndSpawnNearbyPlayers()](#playerupdateandspawnnearbyplayers)
     - [Low level properties](#low-level-properties)
       - [player._client](#player_client)
     - [Low level methods](#low-level-methods-1)
@@ -188,10 +189,6 @@ logs a `message`
 
 broadcasts `message` to all the players with the optional `color`.
 
-#### serv.setBlock(position,blockType)
-
-Saves block in world and sends block update to all players.
-
 #### serv.getPlayer(username)
 
 Returns player object with that username or, if no such player is on the server, null.
@@ -270,6 +267,10 @@ The view size of the player, for example 8 for 16x16
 
 The world which the player is in.
 
+#### player.nearbyPlayers
+
+Nearby players.
+
 ### Events
 
 #### "connected" 
@@ -299,10 +300,6 @@ Fires when the player says `message`.
 #### "positionChanged"
 
 fires when the position changes in small amounts (walking, running, or flying)
-
-#### "teleport"
-
-fires when the position changes in larger amounts (player's position set by `player.sendPosition()`)
 
 ### Methods
 
@@ -343,10 +340,6 @@ this will not make any changes on the server's world and only sends it to the us
 
 send its initial position to the player
 
-#### player.spawn()
-
-tell everybody else that the player spawned
-
 #### player.setGameMode(gameMode)
 
 set player gameMode to `gameMode`
@@ -355,16 +348,13 @@ set player gameMode to `gameMode`
 
 handle `command`
 
+#### player.setBlock(position,blockType)
+
+Saves block in world and sends block update to all players of the same world.
+
 #### player.updateHealth(health)
 
 update the player health.
-
-#### player.sendPosition(position, opt)
-
-Teleport the player to any `position` in the same world. Use `player.changeWorld` to teleport to any world. Options:
-
-- yaw: Set the yaw, default is the current yaw of the player
-- pitch: Set the pitch, default is the current pitch of the player
 
 #### player.changeWorld(world, opt)
 
@@ -376,6 +366,19 @@ The world object which the player is in (use serv.overworld, serv.netherworld, s
 - position: Position player spawns, default is their default spawn point
 - yaw: Yaw in which they spawn, default is 0
 - pitch: Pitch in which they spawn, default is 0
+
+
+#### player.spawnAPlayer(spawnedPlayer)
+
+Spawn `spawnedPlayer` for `player`.
+
+#### player.despawnPlayers(despawnedPlayers)
+
+Despawn `despawnedPlayers` for `player`.
+
+#### player.updateAndSpawnNearbyPlayers()
+
+Spawn and despawn the correct players depending on distance for `player`.
 
 ### Low level properties
 
